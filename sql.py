@@ -166,7 +166,7 @@ class AdminDb:
     def get_all(self):
         with Session(self.engine) as self.session:
             try:
-                result = self.session.query(Admins.user_id).all()
+                result = self.session.query(Admins).all()
                 print(result)
                 return result
             except:
@@ -180,10 +180,13 @@ class EventsDb:
         # self.session = self.Session()
         Base.metadata.create_all(self.engine)
 
-    def add(self, ts, text):
+    def add(self, ts, text, photo=None):
         with Session(self.engine) as self.session:
             try:
-                event = Events(ts=ts, text=text)
+                if photo:
+                    event = Events(ts=ts, text=text, photo=photo)
+                else:
+                    event = Events(ts=ts, text=text)
                 self.session.add(event)
                 self.session.commit()
             except:
@@ -293,6 +296,7 @@ class Events(Base):
     event_id = sq.Column(sq.Integer, primary_key=True)
     ts = sq.Column(sq.Integer)
     text = sq.Column(sq.TEXT)
+    photo = sq.Column(sq.TEXT)
 
     def __repr__(self):
         return f'{self.event_id}\n{self.ts}\n{self.text}\n'

@@ -1,14 +1,9 @@
 import datetime
-import time
-import asyncio
-import os
-import sys
 
-import random
 
 
 class Event:
-    def __init__(self, text: str, dt: datetime.datetime = None, ts=None):
+    def __init__(self, text: str, dt: datetime.datetime = None, ts=None, photo=None):
         if ts:
             self.ts = ts
             self.dt = datetime.datetime.fromtimestamp(ts)
@@ -38,11 +33,14 @@ def new_event_console():
     print(events)
 '''
 
-def new_event(ts, text, db):
+def new_event(ts, text, db, photo=None):
     print('Добавление события...')
     _event = Event(text, ts=ts)
     print(_event)
-    db.add(_event.ts, _event.text)
+    if photo:
+        db.add(_event.ts, _event.text, photo=photo)
+    else:
+        db.add(_event.ts, _event.text)
     print('Добавление события завершено')
     return _event
 
