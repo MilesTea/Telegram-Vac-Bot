@@ -1,4 +1,7 @@
 import datetime
+import time
+from pprint import pprint
+import telebot
 from telebot import asyncio_handler_backends
 from telebot.async_telebot import types as tbat
 import telebot.async_telebot as tba
@@ -10,7 +13,28 @@ import logging
 logger = tba.logger
 tba.logger.setLevel(logging.DEBUG)
 
-token = ''
+token = 'token'
+
+''' Кнопки
+фио + класс => админу         (ссылка на тг) / (отдельный интерфейс, как с событиями + бд)
+
+Заказать справку;             вопрос врачу
+'''
+'''Доп админ кнопки
+Вопросы; Заявки на справку; Настройки(опционально; настройка уведомлений админу)
+'''
+'''Вопросы врачу в админ панели
+список {
+    имя дата
+    вопрос
+    {inline клавиатура: Ответить(возможно forced reply); Закрыть}
+}
+'''
+'''Вопрос врачу со стороны пользователя
+бот: Напишите вопрос, который вы хотели бы задать врачу
+юзер: какой-то вопрос
+бот: Ваш вопрос был направлен врачу, ожидайте ответа (внимание, врач отвечает на вопросы с понедельника...)
+'''
 
 
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -34,17 +58,31 @@ def kb(user_id):
     if user_id in users_state:
         keyboard.row('Отмена')
     else:
+        # Админ кнопки
         if admin_db.check(user_id):
             row = ['Новое событие', 'Все события', 'Удалить событие']
             keyboard.row(*row)
+            keyboard.row('Вопросы','Заявки на справки')
+
+        # Обычные кнопки
+        keyboard.row('Задать вопрос врачу')
+        keyboard.row('Заказать справку')
+        '''
         keyboard.row('Инфо')
         if user_db.is_subscribed(user_id):
             keyboard.row('Отписаться от рассылки')
         else:
             keyboard.row('Подписаться на рассылку')
+        '''
     print('Клавиатура составлена')
+    print(keyboard)
     return keyboard
 
+
+def in_kb(text, data):
+    inline_keyboard = tbat.InlineKeyboardMarkup()
+    inline_keyboard.add(tbat.InlineKeyboardButton(text, callback_data=data))
+    return inline_keyboard
 
 
 
@@ -117,6 +155,72 @@ bot.setup_middleware(Middleware())
 
 
 
+@bot.callback_query_handler(func=lambda call: call.data[0] == 'q')
+async def question_callback(call):
+    # pprint(call)
+    # question = question_db.get(call.data[1:])
+    await bot.answer_callback_query(call.id, '') # Бот принимает сообщение
+    # markup = tbat.ForceReply(selective=False)
+    users_data[call.message.chat.id] = call.data[1:]
+    users_state[call.message.chat.id] = 'question_answer'
+    await bot.send_message(call.message.chat.id, 'Введите ваш ответ', reply_markup=kb(call.message.chat.id))
+    # await bot.answer_callback_query(call.id, f'{call.data}\n{call.message.text}') # Принимает и отправляет ответ(сверху)
+
+
+@bot.message_handler(content_types=['text', 'photo',], in_user_state=True, is_admin=True,
+                     user_state='question_answer')
+async def question_answer0(message):
+    question = question_db.get(users_data[message.chat.id])
+    answer_start = 'Ответ врача на ваш вопрос:\n'
+    if message.content_type == 'text':
+        await bot.send_message(question.question_id, answer_start+message.text, reply_markup=kb(question.question_id))
+    elif message.content_type == 'photo':
+        await bot.send_photo(question.question_id, caption=answer_start+message.caption, photo=message.photo[-1].file_id,
+                             reply_markup=kb(question.question_id))
+    users_state.pop(message.chat.id)
+    users_data.pop(message.chat.id)
+    question_db.delete(question.question_id)
+    await bot.send_message(message.chat.id, 'Ваш ответ отправлен пользователю',
+                           reply_markup=kb(message.chat.id))
+
+
+
+
+
+@bot.callback_query_handler(func=lambda call: call.data[0] == 'c')
+async def certificate_callback(call):
+    await bot.answer_callback_query(call.id, '') # Бот принимает сообщение
+    users_data[call.message.chat.id] = call.data[1:]
+    users_state[call.message.chat.id] = 'certificate_answer'
+    await bot.send_message(call.message.chat.id, 'Введите ваш ответ', reply_markup=kb(call.message.chat.id))
+    # await bot.answer_callback_query(call.id, f'{call.data}\n{call.message.text}') # Принимает и отправляет ответ(сверху)
+
+
+@bot.message_handler(content_types=['text', 'photo',], in_user_state=True, is_admin=True,
+                     user_state='certificate_answer')
+async def certificate_answer0(message):
+    certificate = certificate_db.get(users_data[message.chat.id])
+    answer_start = 'Врач рассмотрел вашу заявку:\n'
+    await bot.send_message(certificate.certificate_id, answer_start+message.text, reply_markup=kb(certificate.certificate_id))
+    users_state.pop(message.chat.id)
+    users_data.pop(message.chat.id)
+    certificate_db.delete(certificate.certificate_id)
+    await bot.send_message(message.chat.id, 'Ваш ответ отправлен пользователю',
+                           reply_markup=kb(message.chat.id))
+
+
+
+
+
+
+# Тестовая информация
+@bot.message_handler(content_types=['text', ], in_user_state=False,
+                     func=lambda message: message.text.lower() == 'тест')
+async def info(message):
+    await bot.send_message(message.chat.id, 'тест',
+                           reply_markup=kb(message.chat.id, True))
+
+
 # Отписка
 @bot.message_handler(content_types=['text', ], in_user_state=False,
                      func=lambda message: message.text.lower() == 'отписаться от рассылки')
@@ -126,7 +230,6 @@ async def unsubscribe(message):
     """
     user_db.subscription(message.chat.id, False)
     await bot.send_message(message.chat.id, text='Вы были отписаны от рассылки', reply_markup=kb(message.chat.id))
-
 
 
 # Подписка
@@ -157,8 +260,54 @@ async def cancel(message):
 # Инфо
 @bot.message_handler(content_types=['text', ], in_user_state=False,
                      func=lambda message: message.text.lower() == 'инфо')
-async def info(message, data):
+async def info(message):
     await bot.send_message(message.chat.id, 'Здесь будет находиться базовая информация',
+                           reply_markup=kb(message.chat.id))
+
+
+# Задать вопрос
+@bot.message_handler(content_types=['text',], in_user_state=False,
+                     func=lambda message: message.text.lower() == 'задать вопрос врачу')
+async def question(message):
+    if not question_db.check(message.chat.id):
+        users_state[message.chat.id] = 'question0'
+        await bot.send_message(message.chat.id, 'Введите свой вопрос в одном сообщении. '
+                                                'Вы также можете прикрепитьк вопросу изображение',
+                               reply_markup=kb(message.chat.id))
+    else:
+        await bot.send_message(message.chat.id, 'Ваш вопрос уже находится в обработке',
+                               reply_markup=kb(message.chat.id))
+
+@bot.message_handler(content_types=['text', 'photo',], in_user_state=True, user_state='question0')
+async def question0(message):
+    if message.content_type == 'text':
+        question_db.add(message.chat.id, time.time(), text=message.text)
+    elif message.content_type == 'photo':
+        question_db.add(message.chat.id, time.time(), text=message.caption, photo=message.photo[-1].file_id)
+    users_state.pop(message.chat.id)
+    await bot.send_message(message.chat.id, 'Ваш вопрос был отправлен',
+                           reply_markup=kb(message.chat.id))
+
+
+
+# Запрос справки
+@bot.message_handler(content_types=['text',], in_user_state=False,
+                     func=lambda message: message.text.lower() == 'заказать справку')
+async def certificate(message):
+    if not certificate_db.check(message.chat.id):
+        users_state[message.chat.id] = 'certificate0'
+        await bot.send_message(message.chat.id, 'Введите необходимые данные для справки',
+                               reply_markup=kb(message.chat.id))
+    else:
+        await bot.send_message(message.chat.id, 'Временное ограничение на 1 справку за раз',
+                               reply_markup=kb(message.chat.id))
+
+@bot.message_handler(content_types=['text',], in_user_state=True, user_state='certificate0')
+async def certificate0(message):
+    if message.content_type == 'text':
+        certificate_db.add(message.chat.id, time.time(), text=message.text)
+    users_state.pop(message.chat.id)
+    await bot.send_message(message.chat.id, 'Ваше заявление на справку было отправлено',
                            reply_markup=kb(message.chat.id))
 
 
@@ -169,6 +318,45 @@ async def info(message, data):
 async def start(message):
     await bot.send_message(message.chat.id, 'Приветствие',
                            reply_markup=kb(message.chat.id))
+
+
+
+# просмотр вопросов
+@bot.message_handler(content_types=['text', ], in_user_state=False, is_admin=True,
+                     func=lambda message: message.text.lower() == 'вопросы')
+async def all_questions(message):
+    questions = question_db.get_all()
+    print(questions)
+    if questions:
+        for question in questions:
+            dt = datetime.datetime.fromtimestamp(int(float(question.ts)))
+            if question.photo:
+                await bot.send_photo(message.chat.id, question.photo, f'{question.question_id}\n{dt}\n{question.text}',
+                                       reply_markup=in_kb('Ответить', f'q{question.question_id}'))
+            else:
+                await bot.send_message(message.chat.id, f'{question.question_id}\n{dt}\n{question.text}',
+                                       reply_markup=in_kb('Ответить', f'q{question.question_id}'))
+    else:
+        await bot.send_message(message.chat.id, 'Нет активных вопросов', reply_markup=kb(message.chat.id))
+
+
+
+
+# просмотр заявок на справки
+@bot.message_handler(content_types=['text', ], in_user_state=False, is_admin=True,
+                     func=lambda message: message.text.lower() == 'заявки на справки')
+async def all_certificates(message):
+    certificates = certificate_db.get_all()
+    if certificates:
+        for certificate in certificates:
+            dt = datetime.datetime.fromtimestamp(int(float(certificate.ts)))
+            await bot.send_message(message.chat.id, f'{certificate.certificate_id}\n{dt}\n{certificate.text}',
+                                       reply_markup=in_kb('Ответить', f'c{certificate.certificate_id}'))
+    else:
+        await bot.send_message(message.chat.id, 'Нет активных заявок', reply_markup=kb(message.chat.id))
+
+
+
 
 
 # просмотр событий
@@ -359,8 +547,10 @@ async def main():
 
 
 if __name__ == '__main__':
-    user_db = sql.UsersDb()
-    admin_db = sql.AdminDb()
-    event_db = sql.EventsDb()
+    user_db = sql.UsersDb(sql.Users, 'user_id')
+    admin_db = sql.AdminsDb(sql.Admins, 'user_id')
+    event_db = sql.EventsDb(sql.Events, 'event_id')
+    question_db = sql.QuestionsDb(sql.Questions, 'question_id')
+    certificate_db = sql.CertificateDb(sql.Certificates, 'certificate_id')
     initialise()
     asyncio.run(main())

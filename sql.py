@@ -6,180 +6,116 @@ from sqlalchemy.orm import sessionmaker, Session, relationship
 working_dir = os.getcwd()
 
 
-class UsersDb:
-    def __init__(self):
+class BaseDb:
+    def __init__(self, table, id_row):
         self.engine = sq.create_engine(f'sqlite:///{working_dir}/database.db')
         self.Session = sessionmaker(bind=self.engine)
-        # self.session = self.Session()
         Base.metadata.create_all(self.engine)
+        self.table = table
+        self.id_row = id_row
 
-    def add(self, user_id, is_subscribed: bool = True):
+    def add(self, entry_id, **kwargs):
         with Session(self.engine) as self.session:
             try:
-                user1 = Users(user_id=user_id, is_subscribed=is_subscribed)
-                self.session.add(user1)
+                new_entry = self.table(**{self.id_row: entry_id, **kwargs})
+                self.session.add(new_entry)
                 self.session.commit()
             except:
-                print('cant add')
+                print('cant add' + str(self.__class__) + str(entry_id))
 
-    def delete(self, user_id):
+    def delete(self, entry_id):
         with Session(self.engine) as self.session:
             try:
-                self.session.query(Users).filter(Users.user_id == user_id).delete()
+                self.session.query(self.table).filter(getattr(self.table, self.id_row) == entry_id).delete()
                 self.session.commit()
             except:
-                print('cant delete')
+                print('cant delete' + str(self.__class__) + str(entry_id))
 
     def delete_all(self):
         with Session(self.engine) as self.session:
             try:
-                self.session.query(Users).delete()
+                self.session.query(self.table).delete()
                 self.session.commit()
             except:
-                print('cant delete')
+                print('cant delete' + str(self.__class__))
 
-    def check(self, user_id=None):
+    def check(self, entry_id):
         with Session(self.engine) as self.session:
             try:
-                if user_id:
-                    if self.session.query(Users).filter_by(user_id=user_id).first():
-                        return True
-                    else:
-                        return False
+                if self.session.get(self.table, entry_id):
+                    return True
                 else:
-                    if self.session.query(Users).first():
-                        return True
-                    else:
-                        return False
+                    return False
             except:
-                print('cant_check')
+                print('cant check:' + str(self.__class__) + str(entry_id))
 
-    def get(self, user_id):
+    def get(self, entry_id):
         with Session(self.engine) as self.session:
             try:
-                result = self.session.query(Users).get(user_id)
+                result = self.session.get(self.table, entry_id)
                 print(result)
                 return result
             except:
-                print('cant_get')
+                print('cant get:' + str(self.__class__) + str(entry_id))
 
     def get_all(self):
         with Session(self.engine) as self.session:
             try:
-                result = self.session.query(Users).all()
+                result = self.session.query(self.table).all()
                 print(result)
                 return result
             except:
-                print('cant_get')
+                print('cant get:' + str(self.__class__))
+
+    def is_on(self):
+        with Session(self.engine) as self.session:
+            try:
+                self.session.query(self.table).first()
+                return True
+            except:
+                print('database is off:' + str(self.__class__))
+                return False
+
+
+class UsersDb(BaseDb):
+    def add(self, user_id, is_subscribed: bool = True):
+        with Session(self.engine) as self.session:
+            try:
+                user1 = self.table(user_id=user_id, is_subscribed=is_subscribed)
+                self.session.add(user1)
+                self.session.commit()
+            except:
+                print('cant add:' + str(self.__class__) + str(user_id))
 
     def get_subscribed(self):
         with Session(self.engine) as self.session:
             try:
-                result = self.session.query(Users).filter_by(is_subscribed=True).all()
+                result = self.session.query(self.table).filter_by(is_subscribed=True).all()
                 print(result)
                 return result
             except:
-                print('cant_get')
+                print('cant_get:' + str(self.__class__))
 
     def is_subscribed(self, user_id):
         user = self.get(user_id)
         return user.is_subscribed
 
     def subscription(self, user_id, subscribe: bool = True):
-        user = self.get(user_id)
-        user.is_subscribed = subscribe
-        try:
-            self.session.add(user)
-            self.session.commit()
-        except:
-            print('cant_change')
-
-    def is_on(self):
         with Session(self.engine) as self.session:
+            user = self.get(user_id)
+            user.is_subscribed = subscribe
             try:
-                self.check()
-                return True
-            except:
-                return False
-
-
-
-
-class AdminDb:
-    def __init__(self):
-        self.engine = sq.create_engine(f'sqlite:///{working_dir}/database.db')
-        self.Session = sessionmaker(bind=self.engine)
-        # self.session = self.Session()
-        Base.metadata.create_all(self.engine)
-
-    def add(self, user_id):
-        with Session(self.engine) as self.session:
-            try:
-                admin = Admins(user_id=user_id)
-                self.session.add(admin)
+                self.session.add(user)
                 self.session.commit()
             except:
-                print('cant add')
-
-    def delete(self, user_id):
-        with Session(self.engine) as self.session:
-            try:
-                self.session.query(Admins).filter(Admins.user_id == user_id).delete()
-                self.session.commit()
-            except:
-                print('cant delete')
-
-    def delete_all(self):
-        with Session(self.engine) as self.session:
-            try:
-                self.session.query(Admins).delete()
-                self.session.commit()
-            except:
-                print('cant delete')
-
-    def check(self, user_id=None):
-        with Session(self.engine) as self.session:
-            try:
-                if user_id:
-                    if self.session.query(Admins).filter_by(user_id=user_id).first():
-                        return True
-                    else:
-                        return False
-                else:
-                    if self.session.query(Admins).first():
-                        return True
-                    else:
-                        return False
-            except:
-                print('cant_check')
-
-    def get(self, user_id):
-        with Session(self.engine) as self.session:
-            try:
-                result = self.session.query(Admins.user_id).get(user_id)
-                print(result)
-                return result
-            except:
-                print('cant_get')
+                print('cant change:' + str(self.__class__) + str(user_id))
 
 
-    def get_all(self):
-        with Session(self.engine) as self.session:
-            try:
-                result = self.session.query(Admins).all()
-                print(result)
-                return result
-            except:
-                print('cant_get')
+class AdminsDb(BaseDb):
+    pass
 
 
-class EventsDb:
-    def __init__(self):
-        self.engine = sq.create_engine(f'sqlite:///{working_dir}/database.db')
-        self.Session = sessionmaker(bind=self.engine)
-        # self.session = self.Session()
-        Base.metadata.create_all(self.engine)
-
+class EventsDb(BaseDb):
     def add(self, ts, text, photo=None):
         with Session(self.engine) as self.session:
             try:
@@ -190,84 +126,41 @@ class EventsDb:
                 self.session.add(event)
                 self.session.commit()
             except:
-                print('cant add')
-
-    def delete(self, event_id):
-        with Session(self.engine) as self.session:
-            try:
-                self.session.query(Events).filter(Events.event_id == event_id).delete()
-                self.session.commit()
-            except:
-                print('cant delete')
-
-    def delete_all(self):
-        with Session(self.engine) as self.session:
-            try:
-                self.session.query(Events).delete()
-                self.session.commit()
-            except:
-                print('cant delete')
-
-    def check(self, event_id=None):
-        with Session(self.engine) as self.session:
-            try:
-                if event_id:
-                    if self.session.query(Events).filter_by(event_id=event_id).first():
-                        return True
-                    else:
-                        return False
-                else:
-                    if self.session.query(Events).first():
-                        return True
-                    else:
-                        return False
-            except:
-                print('cant_check')
-
-    def get(self, event_id):
-        with Session(self.engine) as self.session:
-            try:
-                result = self.session.query(Events.event_id).get(event_id)
-                print(result)
-                return result
-            except:
-                print('cant_get')
+                print('cant add:' + str(self.__class__) + str(text))
 
     def get_all(self):
         with Session(self.engine) as self.session:
             try:
-                result = self.session.query(Events).order_by(Events.ts).all()
+                result = self.session.query(self.table).order_by(self.table.ts).all()
                 print(result)
                 return result
             except:
-                print('cant_get')
+                print('cant_get:' + str(self.__class__))
 
-class DbManager:
-    def __init__(self, user_db_ex: UsersDb, admin_db_ex: AdminDb, event_db_ex: EventsDb):
-        self.user_db = user_db_ex
-        self.admin_db = admin_db_ex
-        self.event_db = event_db_ex
 
-    def admin_add(self, user_id):
-        self.admin_db.add(user_id)
+class QuestionsDb(EventsDb):
+    def add(self, question_id, ts, text, photo=None):
+        with Session(self.engine) as self.session:
+            try:
+                if photo:
+                    question = self.table(question_id=question_id, ts=ts, text=text, photo=photo)
+                else:
+                    question = self.table(question_id=question_id, ts=ts, text=text)
+                self.session.add(question)
+                self.session.commit()
+            except:
+                print('cant add:' + str(self.__class__) + str(text))
 
-    def admin_remove(self, user_id):
-        self.admin_db.delete(user_id)
 
-    def admin_check(self, user_id):
-        self.admin_db.check(user_id)
-
-    def user_add(self, user_id):
-        self.user_db.add(user_id)
-
-    def user_remove(self, user_id):
-        self.user_db.delete(user_id)
-
-    def user_check(self, user_id):
-        self.user_db.check(user_id)
-
-    def user_is_subscribed(self, user_id):
-        self.user_is_subscribed(user_id)
+class  CertificateDb(EventsDb):
+    def add(self, certificate_id, ts, text):
+        with Session(self.engine) as self.session:
+            try:
+                question = self.table(certificate_id=certificate_id, ts=ts, text=text)
+                self.session.add(question)
+                self.session.commit()
+            except:
+                print('cant add:' + str(self.__class__) + str(text))
 
 
 Base = declarative_base()
@@ -302,13 +195,30 @@ class Events(Base):
         return f'{self.event_id}\n{self.ts}\n{self.text}\n'
 
 
+class Questions(Base):
+    __tablename__ = 'questions'
+    question_id = sq.Column(sq.Integer, primary_key=True)
+    ts = sq.Column(sq.Integer)
+    text = sq.Column(sq.TEXT)
+    photo = sq.Column(sq.TEXT)
+
+
+class Certificates(Base):
+    __tablename__ = 'certificates'
+    certificate_id = sq.Column(sq.Integer, primary_key=True)
+    ts = sq.Column(sq.Integer)
+    text = sq.Column(sq.TEXT)
+
+
 if __name__ == '__main__':
-    user_db = UsersDb()
-    admin_db = AdminDb()
-    event_db = EventsDb()
+    user_db = UsersDb(Users, 'user_id')
+    admin_db = AdminsDb(Admins, 'user_id')
+    event_db = EventsDb(Events, 'event_id')
     # db = DbManager(user_db, admin_db)
     # event_db.add('123123123', 'text')
-    # db.user_add(12345)
+    user_db.add(12345)
+    admin_db.add(12345)
+    admin_db.check(12345)
     # print(db.user_check(12345))
     # user_db.add(12345)
     # print(user_db.check(12345))
@@ -324,4 +234,4 @@ if __name__ == '__main__':
     # user_db.get_subscribed()
     # user_db.is_subscribed(466251731)
     # admin_db.get_all()
-    user_db.get_all()
+    # user_db.get_all()

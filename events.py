@@ -65,7 +65,7 @@ def remove_event(event_id, db=None):
     # print('||||||||||||')
     # print(event)
     # print('||||||||||||')
-    db.delete(event_id=event_id)
+    db.delete(event_id)
     print('Удаление события завершено')
 
 
