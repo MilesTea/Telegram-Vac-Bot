@@ -1,4 +1,7 @@
 import os
+import random
+import time
+
 import sqlalchemy as sq
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
@@ -6,9 +9,17 @@ from sqlalchemy.orm import sessionmaker, Session, relationship
 working_dir = os.getcwd()
 
 
+connections = {
+    'sqlite': f'sqlite:///{working_dir}/database.db',
+    'postgresql': f'postgresql+psycopg2://login:password@postgres:5432/telebot'
+}
+
+Base = declarative_base()
+
+
 class BaseDb:
     def __init__(self, table, id_row):
-        self.engine = sq.create_engine(f'sqlite:///{working_dir}/database.db')
+        self.engine = sq.create_engine(connections['sqlite'])
         self.Session = sessionmaker(bind=self.engine)
         Base.metadata.create_all(self.engine)
         self.table = table
@@ -39,13 +50,19 @@ class BaseDb:
             except:
                 print('cant delete' + str(self.__class__))
 
-    def check(self, entry_id):
+    def check(self, entry_id=None):
         with Session(self.engine) as self.session:
             try:
-                if self.session.get(self.table, entry_id):
-                    return True
+                if entry_id:
+                    if self.session.get(self.table, entry_id):
+                        return True
+                    else:
+                        return False
                 else:
-                    return False
+                    if self.session.query(self.table).first():
+                        return True
+                    else:
+                        return False
             except:
                 print('cant check:' + str(self.__class__) + str(entry_id))
 
@@ -53,7 +70,7 @@ class BaseDb:
         with Session(self.engine) as self.session:
             try:
                 result = self.session.get(self.table, entry_id)
-                print(result)
+                # print(result)
                 return result
             except:
                 print('cant get:' + str(self.__class__) + str(entry_id))
@@ -62,7 +79,7 @@ class BaseDb:
         with Session(self.engine) as self.session:
             try:
                 result = self.session.query(self.table).all()
-                print(result)
+                # print(result)
                 return result
             except:
                 print('cant get:' + str(self.__class__))
@@ -78,10 +95,10 @@ class BaseDb:
 
 
 class UsersDb(BaseDb):
-    def add(self, user_id, is_subscribed: bool = True):
+    def add(self, user_id, nickname, is_subscribed: bool = True):
         with Session(self.engine) as self.session:
             try:
-                user1 = self.table(user_id=user_id, is_subscribed=is_subscribed)
+                user1 = self.table(user_id=user_id, nickname=nickname, is_subscribed=is_subscribed)
                 self.session.add(user1)
                 self.session.commit()
             except:
@@ -91,10 +108,19 @@ class UsersDb(BaseDb):
         with Session(self.engine) as self.session:
             try:
                 result = self.session.query(self.table).filter_by(is_subscribed=True).all()
-                print(result)
+                # print(result)
                 return result
             except:
                 print('cant_get:' + str(self.__class__))
+
+    def get_by_nickname(self, nickname):
+        with Session(self.engine) as self.session:
+            try:
+                result = self.session.get(self.table, nickname=nickname)
+                # print(result)
+                return result
+            except:
+                print('cant_get_by_nickname:' + str(self.__class__))
 
     def is_subscribed(self, user_id):
         user = self.get(user_id)
@@ -132,45 +158,92 @@ class EventsDb(BaseDb):
         with Session(self.engine) as self.session:
             try:
                 result = self.session.query(self.table).order_by(self.table.ts).all()
-                print(result)
+                # print(result)
                 return result
             except:
                 print('cant_get:' + str(self.__class__))
 
 
 class QuestionsDb(EventsDb):
-    def add(self, question_id, ts, text, photo=None):
+    def add(self, user_id, nickname, ts, text, photo=None):
         with Session(self.engine) as self.session:
             try:
                 if photo:
-                    question = self.table(question_id=question_id, ts=ts, text=text, photo=photo)
+                    question = self.table(user_id=user_id, nickname=nickname, ts=ts, text=text, photo=photo)
                 else:
-                    question = self.table(question_id=question_id, ts=ts, text=text)
+                    question = self.table(user_id=user_id, nickname=nickname, ts=ts, text=text)
                 self.session.add(question)
                 self.session.commit()
-            except:
+            except Exception as er:
+                print(er)
                 print('cant add:' + str(self.__class__) + str(text))
 
-
-class  CertificateDb(EventsDb):
-    def add(self, certificate_id, ts, text):
+    def count_by_user(self, user_id):
         with Session(self.engine) as self.session:
             try:
-                question = self.table(certificate_id=certificate_id, ts=ts, text=text)
+                result = self.session.query(self.table).filter_by(user_id=user_id).count()
+                if not result:
+                    result = 0
+                # print(result)
+                return result
+            except Exception as er:
+                print(er)
+                print('cant get_by_user:' + str(self.__class__) + str(user_id))
+
+    def check(self, user_id=None):
+        with Session(self.engine) as self.session:
+            try:
+                if user_id:
+                    if self.session.first(self.table, user_id=user_id):
+                        return True
+                    else:
+                        return False
+                else:
+                    if self.session.query(self.table).first():
+                        return True
+                    else:
+                        return False
+            except:
+                print('cant check:' + str(self.__class__) + str(user_id))
+
+
+class CertificateDb(QuestionsDb):
+    '''
+    def add(self, user_id, nickname, ts, text):
+        with Session(self.engine) as self.session:
+            try:
+                question = self.table(user_id=user_id, nickname=nickname, ts=ts, text=text)
                 self.session.add(question)
                 self.session.commit()
-            except:
+            except Exception as er:
+                print(er)
                 print('cant add:' + str(self.__class__) + str(text))
 
+    def count_by_user(self, user_id):
+        with Session(self.engine) as self.session:
+            try:
+                result = self.session.query(self.table).filter_by(user_id=user_id).count()
+                if not result:
+                    result = 0
+                print(result)
+                return result
+            except Exception as er:
+                print(er)
+                print('cant get_by_user:' + str(self.__class__) + str(user_id))
+    '''
 
-Base = declarative_base()
+
+
 
 
 class Users(Base):
     __tablename__ = 'users'
     user_id = sq.Column(sq.Integer, primary_key=True)
+    nickname = sq.Column(sq.TEXT)
     is_subscribed = sq.Column(sq.Boolean)
-    admins = relationship('Admins', back_populates='users', uselist=False)
+    admin = relationship('Admins', back_populates='user', uselist=False)
+    questions = relationship('Questions', back_populates='user')
+    certificates = relationship('Certificates', back_populates='user')
 
     def __repr__(self):
         return f'{self.user_id} | subscribed:{self.is_subscribed}'
@@ -179,7 +252,7 @@ class Users(Base):
 class Admins(Base):
     __tablename__ = 'admins'
     user_id = sq.Column(sq.Integer, sq.ForeignKey('users.user_id'), primary_key=True)
-    users = relationship('Users', back_populates='admins')
+    user = relationship('Users', back_populates='admin')
     def __repr__(self):
         return f'{self.user_id}'
 
@@ -198,27 +271,51 @@ class Events(Base):
 class Questions(Base):
     __tablename__ = 'questions'
     question_id = sq.Column(sq.Integer, primary_key=True)
+    user_id = sq.Column(sq.Integer, sq.ForeignKey('users.user_id'))
+    nickname = sq.Column(sq.TEXT)
     ts = sq.Column(sq.Integer)
     text = sq.Column(sq.TEXT)
     photo = sq.Column(sq.TEXT)
+
+    user = relationship('Users', back_populates='questions')
 
 
 class Certificates(Base):
     __tablename__ = 'certificates'
     certificate_id = sq.Column(sq.Integer, primary_key=True)
+    user_id = sq.Column(sq.Integer, sq.ForeignKey('users.user_id'))
+    nickname = sq.Column(sq.TEXT)
     ts = sq.Column(sq.Integer)
     text = sq.Column(sq.TEXT)
+    photo = sq.Column(sq.TEXT)
+
+    user = relationship('Users', back_populates='certificates')
 
 
 if __name__ == '__main__':
     user_db = UsersDb(Users, 'user_id')
     admin_db = AdminsDb(Admins, 'user_id')
     event_db = EventsDb(Events, 'event_id')
+    question_db = QuestionsDb(Questions, 'question_id')
+    certificate_db = CertificateDb(Certificates, 'certificate_id')
+
+    import time
+    for i in range(16):
+        user_db.add(i, f'test_user{i}')
+    for i in range(13):
+        question_db.add(i, f'@test_user_{i}', time.time(), f'тестовый вопрос {i}')
+    for i in range(16):
+        certificate_db.add(i, f'@test_user_{i}', time.time(), f'тестовая заявка {i}')
+    for i in range(5):
+        event_db.add(time.time()+i*50000 + random.randrange(1, 20000), f'тестовое событие {i}')
+    event_db.add(time.time() + 70000, f'тестовое событие с картинкой', 'AgACAgIAAxkBAAIN3GLZaF8_ps40AaVl0loyepQBfAmpAALvwTEbl5LJSq6po3pNRiuAAQADAgADeAADKQQ')
+
+    # certificate_db.count_by_user(466251731)
     # db = DbManager(user_db, admin_db)
     # event_db.add('123123123', 'text')
-    user_db.add(12345)
-    admin_db.add(12345)
-    admin_db.check(12345)
+    # user_db.add(12345)
+    # admin_db.add(12345)
+    # admin_db.check(12345)
     # print(db.user_check(12345))
     # user_db.add(12345)
     # print(user_db.check(12345))

@@ -1,17 +1,14 @@
 import datetime
-
+import utils
 
 
 class Event:
-    def __init__(self, text: str, dt: datetime.datetime = None, ts=None, photo=None):
+    def __init__(self, text: str, ts, photo=None):
         if ts:
             self.ts = ts
-            self.dt = datetime.datetime.fromtimestamp(ts)
-        elif dt:
-            self.dt = dt
-            self.ts = datetime.datetime.timestamp(dt)
+            self.dt = utils.get_datetime(ts)
         else:
-            raise TypeError('No arguments given. Event must have either dt or ts.')
+            raise TypeError('No arguments given. Event must have ts.')
         self.text = text
 
     def __str__(self):
@@ -34,14 +31,14 @@ def new_event_console():
 '''
 
 def new_event(ts, text, db, photo=None):
-    print('Добавление события...')
+    # print('Добавление события...')
     _event = Event(text, ts=ts)
-    print(_event)
+    # print(_event)
     if photo:
         db.add(_event.ts, _event.text, photo=photo)
     else:
         db.add(_event.ts, _event.text)
-    print('Добавление события завершено')
+    # print('Добавление события завершено')
     return _event
 
 
@@ -60,39 +57,39 @@ def new_event(ts, text, db, photo=None):
 
 
 def remove_event(event_id, db=None):
-    print('Удаление события...')
+    # print('Удаление события...')
     # events.remove(event)
     # print('||||||||||||')
     # print(event)
     # print('||||||||||||')
     db.delete(event_id)
-    print('Удаление события завершено')
+    # print('Удаление события завершено')
 
 
 
 def make_ts(raw_dt):
-    print('Формирование ts...')
+    # print('Формирование ts...')
     raw_dt = raw_dt.replace('.', ' ').replace(':', ' ')
     strp_dt = raw_dt.split(' ')
-    print('проверка')
-    if len(strp_dt) != 6:
+    # print('проверка')
+    if len(strp_dt) != 5:
         return None
     _numbers = []
     for number in strp_dt:
         while len(number) < 2:
             number = '0' + number
         while len(number) > 2:
-            number = number[1:-1]
+            number = number[1:]
         _numbers.append(number)
     formatted_dt = ' '.join(_numbers)
-    _format = '%d %m %y %H %M %S'
-    print('конвертирование')
+    _format = '%d %m %y %H %M'
+    # print('конвертирование')
     try:
         dt = datetime.datetime.strptime(formatted_dt, _format)
         ts = datetime.datetime.timestamp(dt)
     except ValueError:
         return None
-    print('Формирование ts завершено')
+    # print('Формирование ts завершено')
     return ts
 
 
@@ -120,15 +117,15 @@ def fish_event():
 
 
 def check(db):
-    print('Проверка событий...')
+    # print('Проверка событий...')
     now = datetime.datetime.now()
     for event in db.get_all():
-        print('now:  ', now)
-        print('event:', datetime.datetime.fromtimestamp(int(float(event.ts))))
+        # print('now:  ', now)
+        # print('event:', datetime.datetime.fromtimestamp(int(float(event.ts))))
         if event.ts <= now.timestamp():
-            print('событие!')
+            # print('событие!')
             return event
-    print('Проверка событий завершена')
+    # print('Проверка событий завершена')
     '''
     for event in events:
         print('now:  ', now)
@@ -139,9 +136,9 @@ def check(db):
     '''
 
 def sort_events(events):
-    print('Сортировка событий...')
+    # print('Сортировка событий...')
     s_events = sorted(events, key=lambda x: x.ts)
-    print('Сортировка событий завершена')
+    # print('Сортировка событий завершена')
     return s_events
 
 
