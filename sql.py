@@ -163,6 +163,15 @@ class EventsDb(BaseDb):
             except:
                 print('cant_get:' + str(self.__class__))
 
+    def get_first(self):
+        with Session(self.engine) as self.session:
+            try:
+                result = self.session.query(self.table).order_by(self.table.ts).first()
+                # print(result)
+                return result
+            except:
+                print('cant_get:' + str(self.__class__))
+
 
 class QuestionsDb(EventsDb):
     def add(self, user_id, nickname, ts, text, photo=None):

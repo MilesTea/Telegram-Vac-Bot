@@ -4,7 +4,6 @@ from telebot import asyncio_handler_backends
 from telebot.async_telebot import types as tbat
 import telebot.async_telebot as tba
 import asyncio
-import events
 import utils
 import sql
 
@@ -510,7 +509,7 @@ async def new_event(message):
 
 @bot.message_handler(content_types=['text', ], in_user_state=True , user_state='set0', is_admin=True)
 async def new_event_0(message):
-    ts = events.make_ts(message.text)
+    ts = utils.make_ts(message.text)
     if not ts:
         await bot.send_message(message.chat.id, 'Введите корректную дату согласно образцу',
                                reply_markup=kb(message.chat.id))
@@ -524,17 +523,18 @@ async def new_event_0(message):
 
 @bot.message_handler(content_types=['text', 'photo', ], in_user_state=True , user_state='set1', is_admin=True)
 async def new_event_1(message):
+    ts = users_data[message.chat.id]["date"]
     if message.content_type == 'text':
-        event = events.new_event(users_data[message.chat.id]['date'], message.text, event_db)
+        event_db.add(ts, message.text)
         users_state.pop(message.chat.id)
         users_data.pop(message.chat.id, None)
-        await bot.send_message(message.chat.id, f'Событие запланировано на {event.dt}',
+        await bot.send_message(message.chat.id, f'Событие запланировано на {utils.get_datetime(ts)}',
                                reply_markup=kb(message.chat.id))
     elif message.content_type == 'photo':
-        event = events.new_event(users_data[message.chat.id]['date'], message.caption, event_db, message.photo[-1].file_id)
+        event_db.add(ts, message.caption, photo=message.photo[-1].file_id)
         users_state.pop(message.chat.id)
         users_data.pop(message.chat.id, None)
-        await bot.send_message(message.chat.id, f'Событие запланировано на {event.dt}',
+        await bot.send_message(message.chat.id, f'Событие запланировано на {utils.get_datetime(ts)}',
                                reply_markup=kb(message.chat.id))
 
 
@@ -620,22 +620,20 @@ async def sending_message(user, text, photo=False):
                 await bot.send_message(user.user_id, text, reply_markup=kb(user.user_id))
             except:
                 print(f'ОШИБКА ПРИ ОТПРАВЛЕНИИ УВЕДОМЛЕНИЯ ПОЛЬЗОВАТЕЛЮ {user.user_id}')
-            await asyncio.sleep(0.2)
     else:
         # for user in users:
             try:
                 await bot.send_photo(user.user_id, photo, text, reply_markup=kb(user.user_id))
             except:
                 print(f'ОШИБКА ПРИ ОТПРАВЛЕНИИ УВЕДОМЛЕНИЯ ПОЛЬЗОВАТЕЛЮ {user.user_id}')
-            await asyncio.sleep(0.2)
 
 
 async def timer():
     t = 0
     while True:
         # print('Скрипт таймера...')
-        event = events.check(event_db)
-        if event:
+        event = event_db.get_first()
+        if utils.check_event(event):
             print(event)
             users = user_db.get_subscribed()
             while users:
@@ -643,17 +641,17 @@ async def timer():
                     asyncio.create_task(sending_message(user, event.text, event.photo))
                 users = users[15:]
                 await asyncio.sleep(1)
-            # if not event.photo:
-            #     await sending_messages(event.text)
-            # else:
-            #     await sending_messages(event.text, event.photo)
-            events.remove_event(event.event_id, db=event_db)
+            event_db.delete(event.event_id)
         if t % 60 == 0:
             print(f'{t // 60} minutes elapsed', flush=True)
 
         t += 5
         # print('Скрипт таймера выполнен')
         await asyncio.sleep(5)
+
+
+
+
 
 
 def initialise():
