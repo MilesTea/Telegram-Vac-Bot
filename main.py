@@ -6,7 +6,7 @@ import telebot.async_telebot as tba
 import asyncio
 import utils
 import sql
-
+import copy
 
 # logger = tba.logger
 # tba.logger.setLevel(logging.DEBUG)
@@ -179,16 +179,19 @@ async def cancel(message):
 
 
 
-
-async def pag(current_page, user_id, mode='q'):
-    settings = {
-        'q': {'entries': question_db, 'id_row': 'question_id', 'callback_code': 'q'},
-        'c': {'entries': certificate_db, 'id_row': 'certificate_id', 'callback_code': 'c'}
+paginator_settings = {
+        'q': {'entries': 'question_db', 'id_row': 'question_id', 'callback_code': 'q',
+              'buttons': [[['Ответить', 'qa'], ['Удалить', 'qd']]], 'rows': ['nickname', 'text']},
+        'c': {'entries': 'certificate_db', 'id_row': 'certificate_id', 'callback_code': 'c',
+              'buttons': [[['Ответить', 'ca'], ['Удалить', f'cd']]], 'rows': ['nickname', 'text']},
+        'e': {'entries': 'event_db', 'id_row': 'event_id', 'callback_code': 'e',
+              'buttons': [[['Удалить', f'ed']]], 'rows': ['text']},
     }
-    current_settings = settings.get(mode)
+async def paginator(current_page, user_id, mode='q'):
+    current_settings = paginator_settings.get(mode)
     id_row = current_settings['id_row']
     cb_code = current_settings['callback_code']
-    entries = current_settings['entries'].get_all()
+    entries = eval(f'{current_settings["entries"]}.get_all()')
     page_elements = 5
     all_pages, m = divmod(len(entries), page_elements)
     all_pages += 1 if m > 0 else 0
@@ -199,15 +202,29 @@ async def pag(current_page, user_id, mode='q'):
     for i in range(current_page_elements):
         entry = entries[i + (current_page-1) * page_elements]
         dt = utils.get_datetime(entry.ts)
-        # print('отправляю...')
-        buttons = in_kb([[['Ответить', f'{cb_code}a{getattr(entry, id_row)}'], ['Удалить', f'{cb_code}d{getattr(entry, id_row)}']]])
-        if ('photo' in dir(entry)) and (entry.photo):
+
+        # Генерация кнопок
+        buttons = copy.deepcopy(current_settings['buttons'])
+        for row in buttons:
+            for button in row:
+                button[1] = button[1] + str(getattr(entry, id_row))
+        buttons = in_kb(buttons)
+
+        # Генерация текста сообщения
+        text = []
+        for a in current_settings['rows']:
+            text.append(getattr(entry, a))
+        text = '\n'.join(text)
+
+        # Отправка сообщения
+        if ('photo' in dir(entry)) and entry.photo:
             temporary_messages[user_id].append((await bot.send_photo(user_id, entry.photo,
-                                                       f'{entry.nickname}\n{dt}\n{entry.text}',
-                                                       reply_markup=buttons)).id)
+                                                                     dt + '\n' + text,
+                                                                     reply_markup=buttons)).id)
         else:
-            temporary_messages[user_id].append((await bot.send_message(user_id, f'{entry.nickname}\n{dt}\n{entry.text}',
-                                                         reply_markup=buttons)).id)
+            temporary_messages[user_id].append((await bot.send_message(user_id,
+                                                                       dt + '\n' + text,
+                                                                       reply_markup=buttons)).id)
         # print('отправил')
     if all_pages == 1:
         kb_ar = None
@@ -224,7 +241,7 @@ async def pag(current_page, user_id, mode='q'):
 @bot.callback_query_handler(func=lambda call: call.data[1] == 'p')
 async def answer_callback(call):
     await bot.answer_callback_query(call.id, '')
-    await pag(int(call.data[2:]), call.message.chat.id, call.data[0])
+    await paginator(int(call.data[2:]), call.message.chat.id, call.data[0])
 
 
 # Удаление по inline кнопке
@@ -248,6 +265,7 @@ async def delete_callback(call):
 # Ответ на вопрос
 @bot.callback_query_handler(func=lambda call: call.data[0:2] == 'qa')
 async def question_callback(call):
+    print(call.data[2:])
     question = question_db.get(call.data[2:])
     await bot.answer_callback_query(call.id, '')  # Бот принимает сообщение
     if not question:
@@ -456,7 +474,7 @@ async def all_questions(message):
     questions = question_db.check()
     # print(questions)
     if questions:
-        await pag(1, message.chat.id)
+        await paginator(1, message.chat.id)
     else:
         await bot.send_message(message.chat.id, 'Нет активных вопросов', reply_markup=kb(message.chat.id))
 
@@ -469,7 +487,7 @@ async def all_questions(message):
 async def all_certificates(message):
     certificates = certificate_db.check()
     if certificates:
-        await pag(1, message.chat.id, 'c')
+        await paginator(1, message.chat.id, 'c')
     else:
         await bot.send_message(message.chat.id, 'Нет активных заявок', reply_markup=kb(message.chat.id))
 
@@ -481,19 +499,10 @@ async def all_certificates(message):
 @bot.message_handler(content_types=['text', ], in_user_state=False, is_admin=True,
                      func=lambda message: message.text.lower() == 'все события')
 async def all_events(message):
-    _events = event_db.get_all()
+    events = event_db.get_all()
     # print(_events)
-    if _events:
-        for event in _events:
-            # dt = datetime.datetime.fromtimestamp(int(float(event.ts)))
-            dt = utils.get_datetime(event.ts)
-            if event.photo:
-                await bot.send_photo(message.chat.id, event.photo, f'{dt}\n{event.text}',
-                                       reply_markup=in_kb([[['Удалить', f'ed{event.event_id}']]]))
-            else:
-                await bot.send_message(message.chat.id, f'{dt}\n{event.text}',
-                                       reply_markup=in_kb([[['Удалить', f'ed{event.event_id}']]]))
-            await asyncio.sleep(0.1)
+    if events:
+        await paginator(1, message.chat.id, 'e')
     else:
         await bot.send_message(message.chat.id, 'Нет активных событий', reply_markup=kb(message.chat.id))
 
