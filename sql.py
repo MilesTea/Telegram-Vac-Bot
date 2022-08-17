@@ -9,16 +9,27 @@ working_dir = os.getcwd()
 
 
 connections = {
-    'sqlite': f'sqlite:///{working_dir}/database.db',
-    'postgresql': f'postgresql+psycopg2://login:password@postgres:5432/telebot'
+    'sqlite': [f'sqlite:///{working_dir}/', 'database.db', ],
+    'postgresql': [f'postgresql+psycopg2://', 'login:password@postgres:5432/telebot', ]
 }
 
 Base = declarative_base()
 
 
+class DbException(Exception):
+    pass
+
+
 class Connection:
-    def __init__(self, connection_mode):
-        self.engine = sq.create_engine(connections[connection_mode])
+    def __init__(self, connection_mode: str, address: str = ''):
+        connection_mode = connection_mode.lower()
+        if connection_mode in connections:
+            if not address:
+                self.engine = sq.create_engine(connections[connection_mode][0] + connections[connection_mode][1])
+            else:
+                self.engine = sq.create_engine(connections[connection_mode][0] + address)
+        else:
+            raise DbException('This database is not supported')
 
 
 class BaseDb:

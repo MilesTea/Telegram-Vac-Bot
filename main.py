@@ -1,5 +1,6 @@
 #!/usr/bin/python3.3
 import time
+import sys
 from telebot import asyncio_handler_backends
 from telebot.async_telebot import types as tbat
 import telebot.async_telebot as tba
@@ -12,7 +13,7 @@ import copy
 # logger = tba.logger
 # tba.logger.setLevel(logging.DEBUG)
 
-token = 'token'
+token = ''
 
 # кеш состояния пользователя (для реализации внутренних команд)
 users_state = {}
@@ -745,17 +746,24 @@ async def main():
 if __name__ == '__main__':
     print('Инициализация...', flush=True)
     current_settings = settings.Settings()
+    token = sys.argv[1] if len(sys.argv) >= 2 else ''
+    db = sys.argv[2] if len(sys.argv) >= 3 else ''
+    address = sys.argv[3] if len(sys.argv) >= 4 else ''
+    token, db, address = settings.get_connection(token, db, address)
     while True:
         try:
-            connection = sql.Connection('sqlite')
+            connection = sql.Connection(db, address)
             user_db = sql.UsersDb(sql.Users, 'user_id', connection)
             admin_db = sql.AdminsDb(sql.Admins, 'user_id', connection)
             event_db = sql.EventsDb(sql.Events, 'event_id', connection)
             question_db = sql.QuestionsDb(sql.Questions, 'question_id', connection)
             certificate_db = sql.CertificateDb(sql.Certificates, 'certificate_id', connection)
             break
-        except Exception as error:
-            print(error)
+        except sql.DbException as db_error:
+            print(db_error)
+            sys.exit(1)
+        except Exception as _error:
+            print(_error)
             print('Ожидание базы данных', flush=True)
             time.sleep(5)
     print('Инициализация выполнена', flush=True)

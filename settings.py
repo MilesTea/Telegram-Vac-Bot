@@ -116,6 +116,23 @@ def get_texts():
             _texts = json.load(file)
     else:
         with open('texts.json', 'w', encoding='utf-8') as file:
-            json.dump(texts, file, sort_keys=True, indent=2)
+            json.dump(texts, file, sort_keys=True, indent=2, ensure_ascii=False)
             _texts = texts
     return _texts
+
+
+def get_connection(token, db, address):
+    if 'connection.json' in os.listdir(os.getcwd()):
+        with open('connection.json', 'r', encoding='utf-8') as file:
+            connection = json.load(file)
+        token = connection['token'] if not token else token
+        db = connection['db'] if not db else db
+        address = connection['address'] if not address else address
+    else:
+        token = '' if not token else token
+        db = 'sqlite' if not db else db
+        address = 'database.db' if not address else address
+    with open('connection.json', 'w', encoding='utf-8') as file:
+        connection = {'token': token, 'db': db, 'address': address}
+        json.dump(connection, file, sort_keys=True, indent=2, ensure_ascii=False)
+    return token, db, address
